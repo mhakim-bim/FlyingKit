@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Coravel.Invocable;
+using FlyingKit.Core.Abstractions;
 using FlyingKit.Core.Metadata;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
@@ -8,46 +9,32 @@ namespace FlyingKit.Core.Services;
 
 public class JobScanner : IInvocable
 {
-    private readonly IConnectionMultiplexer _connectionMultiplexer;
     private readonly ILogger<JobScanner> _logger;
     private readonly JobProcessor _jobProcessor;
+    private readonly IJobStorage _jobStorage;
 
-    public JobScanner(IConnectionMultiplexer connectionMultiplexer,
+    public JobScanner(
         ILogger<JobScanner> logger,
-         JobProcessor jobProcessor)
+        JobProcessor jobProcessor,
+        IJobStorage jobStorage)
     {
-        _connectionMultiplexer = connectionMultiplexer;
         _logger = logger;
         _jobProcessor = jobProcessor;
+        _jobStorage = jobStorage;
     }
 
 
     public async Task Invoke()
     {
         _logger.LogInformation("Job Scanner Started");
+
+        var pendingJobsIds = await _jobStorage.GetPendingJobsAsync();
         
-        var database = _connectionMultiplexer.GetDatabase();
-        
-        foreach (var endpoint in _connectionMultiplexer.GetEndPoints())
+        foreach (var pendingJobId in pendingJobsIds)
         {
-            var server = _connectionMultiplexer.GetServer(endpoint);
-            if (!server.IsConnected) continue;
-
-            // Enumerate lazily via SCAN; avoid materializing unless necessary
-            foreach (var key in server.Keys(database: database.Database,
-                         pattern: "job:*", pageSize: 10))
-            {
-                _logger.LogInformation($"Found unfinished job {key}");
-
-                var redisValue = await _connectionMultiplexer.GetDatabase().StringGetAsync(key);
-                
-                _logger.LogInformation($"Job State {redisValue}");
-
-                var jobState = JsonSerializer.Deserialize<JobState>(redisValue);
-
-                await _jobProcessor.ProcessJobAsync(jobState);
-                
-            }
+           var pendingJob = await _jobStorage.GetJobAsync(pendingJobId);
+           _logger.LogInformation("Processing Job {JobId}",pendingJob.JobId);
+           await _jobProcessor.ProcessJobAsync(pendingJob);
         }
     }
 }

@@ -1,11 +1,12 @@
 using System.Text.Json;
+using FlyingKit.Core.Abstractions;
 using FlyingKit.Core.Metadata;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 
 namespace FlyingKit.Core.Services;
 
-public class RedisJobStorage
+public class RedisJobStorage : IJobStorage
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisJobStorage> _logger;
@@ -136,5 +137,14 @@ public class RedisJobStorage
         await db.SetRemoveAsync(FailedSet, jobId);
         await db.SetRemoveAsync(CompletedSet, jobId);
         await db.SortedSetRemoveAsync(ScheduledSet, jobId);
+    }
+
+    public async Task<List<string>> GetPendingJobsAsync()
+    {
+        // get from pending jobs set
+        var db = _redis.GetDatabase();
+
+        var jobIds = await db.SetMembersAsync(PendingQueue);
+        return jobIds.Select(id => (string)id).ToList();
     }
 }

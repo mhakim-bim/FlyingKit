@@ -1,3 +1,4 @@
+using FlyingKit.Core.Abstractions;
 using FlyingKit.Core.Metadata;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -11,14 +12,13 @@ namespace FlyingKit.Core.Services;
 public class JobProcessor
 {
     private readonly JobHandlersStorage _jobHandlersStorage;
-    
-    private readonly RedisJobStorage _redisJobStorage;
+    private readonly IJobStorage _jobStorage;
     private readonly ILogger<JobProcessor> _logger;
 
-    public JobProcessor(JobHandlersStorage jobHandlersStorage, RedisJobStorage redisJobStorage,ILogger<JobProcessor> logger)
+    public JobProcessor(JobHandlersStorage jobHandlersStorage, IJobStorage jobStorage,ILogger<JobProcessor> logger)
     {
         _jobHandlersStorage = jobHandlersStorage;
-        _redisJobStorage = redisJobStorage;
+        _jobStorage = jobStorage;
         _logger = logger;
         
     }
@@ -48,7 +48,7 @@ public class JobProcessor
                     newJobState.LastError = exception.Message;
                     newJobState.ProcessingStartedAt = DateTime.UtcNow;
                     
-                    await _redisJobStorage.UpdateJobStatusAsync(newJobState);
+                    await _jobStorage.UpdateJobStatusAsync(newJobState);
 
                 });
           
@@ -65,13 +65,8 @@ public class JobProcessor
                 return jobState;
             },context,CancellationToken.None);
             
-            await _redisJobStorage.RemoveJobAsync(jobState.JobId);
+            await _jobStorage.RemoveJobAsync(jobState.JobId);
         }
         
-    }
-    
-    private async ValueTask OnRetry(OnRetryArguments<JobState> arg)
-    {
-        _logger.LogInformation("Retrying");
     }
 }

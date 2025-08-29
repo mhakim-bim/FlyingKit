@@ -12,7 +12,8 @@ public static class CoreExtensions
     {
         
         // Register our Hangfire-like services
-        services.AddSingleton<RedisJobStorage>();
+        services.AddSingleton<IJobStorage,RedisJobStorage>();
+        
         services.AddSingleton<JobScheduler>();
 
         services.AddSingleton<JobHandler>();
